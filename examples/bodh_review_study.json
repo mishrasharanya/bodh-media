@@ -1,0 +1,18 @@
+{
+  "name": "Bodh claim review result",
+  "task": "Based on the result above, what can you conclude about the claim?",
+  "outcome": "Participant correctly identifies the claim as still awaiting verification",
+  "choices": [
+    "The claim has been verified.",
+    "The claim still needs review."
+  ],
+  "target_choice": "The claim still needs review.",
+  "audiences": {
+    "first_time": "People who have never used Bodh",
+    "returning": "People who have previously reviewed a claim in Bodh"
+  },
+  "variants": {
+    "status_label": "Claim status: Needs review\nCandidate sources: 2",
+    "plain_language": "Bodh found two possible sources. The claim still needs to be verified."
+  }
+}

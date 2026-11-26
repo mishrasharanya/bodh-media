@@ -83,3 +83,79 @@ python scripts/asvspoof_transfer.py evaluate data/asvspoof2019-pilot \
 python scripts/lavan_transfer.py data/lavan2025 \
   runs/asvspoof-preflight runs/asvspoof-pretrain/encoder.npz runs/lavan-transfer
 ```
+
+## ASVspoof-to-In-the-Wild evaluation
+
+A CPU-only logistic model uses median absolute changes in frame-centered log-mel energies over 10 ms and 40 ms. Each change is measured within consecutive active frames after peak normalization. The model fits on **200 audited ASVspoof 2019 train clips**. Its threshold minimizes balanced error on **116 audited ASVspoof development clips**, with ties favoring fewer false alarms. The separate evaluation command loads the frozen weights and threshold and scores the **200 In-the-Wild clips** from 54 speakers. The samples share zero exact file or decoded-waveform matches across training/development and test.
+
+| Model | ROC-AUC | Spoof precision | Spoof recall | Spoof F1 | False alarms / 100 genuine | Missed spoofs / 100 spoof |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Existing trimmed cue baseline | 0.475 | 0.460 | 0.460 | 0.460 | 54 | 54 |
+| Temporal spectral model | 0.655 | 0.598 | 0.490 | 0.538 | 33 | 51 |
+
+ROC-AUC increased by 0.180, with a paired speaker-bootstrap 95% interval of +0.074 to +0.299. In-the-Wild was examined in earlier experiments, so this is a diagnostic cross-corpus comparison. The interval describes uncertainty across the sampled speakers. A new external corpus is needed to confirm transfer beyond this pilot. The media review command continues to use the existing cue baseline.
+
+Run from the repository root with the ASVspoof audit and baseline above and the [In-the-Wild pilot](media-review.md) already prepared. Use a new output directory for each training run.
+
+```sh
+export OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+python scripts/cross_corpus_audio.py train data/asvspoof2019-pilot \
+  runs/asvspoof-preflight runs/asvspoof-to-itw-temporal
+python scripts/cross_corpus_audio.py evaluate data/in-the-wild-pilot \
+  runs/asvspoof-preflight runs/asvspoof-to-itw-temporal runs/asvspoof-baseline/model.json
+```
+
+The run saves `model.json`, `external.json` and `external_scores.csv`.
+
+### Controlled background noise
+
+For each of the same 200 In-the-Wild clips, generate a seeded stationary pink-noise waveform. Scale the added noise to 20 dB and 10 dB SNR by measuring the original and added-noise power over the original clip's active frames. Reuse the same noise waveform at both levels. Score all variants in memory with the existing weights and thresholds. The reference column uses the original recording, which may already contain background noise. The reported SNR refers to the added noise.
+
+| Detector | Added noise | ROC-AUC | Spoof F1 | False alarms / 100 genuine | Missed spoofs / 100 spoof | Decisions flipped / 200 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Trimmed cues | None | 0.475 | 0.460 | 54 | 54 | 0 |
+| Trimmed cues | 20 dB SNR | 0.506 | 0.526 | 68 | 40 | 28 |
+| Trimmed cues | 10 dB SNR | 0.517 | 0.557 | 71 | 34 | 37 |
+| Temporal spectral | None | 0.655 | 0.538 | 33 | 51 | 0 |
+| Temporal spectral | 20 dB SNR | 0.577 | 0.407 | 33 | 66 | 57 |
+| Temporal spectral | 10 dB SNR | 0.538 | 0.446 | 29 | 63 | 70 |
+
+At 10 dB, the temporal model's ROC-AUC fell by 0.117, with a paired speaker-bootstrap 95% interval of −0.218 to −0.026. Of its 70 decision flips, 39 introduced errors and 31 corrected errors. The cue detector's F1 increased as it flagged more clips of both classes. This experiment measures sensitivity to stationary pink noise on an existing pilot. Other types of noise and recording conditions require separate tests.
+
+```sh
+export OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+python scripts/audio_snr_stress.py data/in-the-wild-pilot runs/asvspoof-to-itw-temporal \
+  runs/asvspoof-baseline/model.json runs/in-the-wild-pilot runs/audio-snr-stress
+```
+
+`report.json` records the metrics and paired intervals. `scores.csv` contains the logits and decisions for each clip and condition. The command checks that the models, input recordings and original scores match the saved external evaluation.
+
+## Audience response to human recordings and voice clones
+
+This experiment asks how two groups of listeners rated the realness and perceived trustworthiness of the same human recordings and voice clones. It uses 50 listeners and 40 speaker pairs from Experiment 1b. A fixed seed divides the speakers into 20 calibration and 20 evaluation pairs. The mean realness rating each listener gives to the human calibration recordings assigns that listener to the lower- or higher-rating half of the study panel. The evaluation uses the same listeners and a different set of speakers. [Lavan et al., Experiment 1b](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0332692)
+
+| Listener group | Listeners | Realness, clone minus human | Perceived trustworthiness, clone minus human |
+| --- | ---: | ---: | ---: |
+| Lower calibration realness | 25 | +4.78 | +3.43 |
+| Higher calibration realness | 25 | −3.64 | +0.50 |
+
+Differences are points on the original 0–100 scales. Each difference averages complete human–clone pairs within listener, then averages across listeners. The report also resamples whole listeners with replacement to show how much a 10-person panel mean could vary on these same evaluation clips. The middle 80% of simulated realness differences ranged from +1.01 to +8.81 for the lower group and −6.89 to −0.49 for the higher group. These ranges describe panel resampling on fixed speakers.
+
+As a backtest, the calibration mean for each group and voice type predicts the corresponding group's mean rating on each held-out clip. Compared with pooling listeners during calibration, group-specific estimates reduced mean absolute error from **9.44 to 7.73** points for realness and **7.41 to 4.76** for perceived trustworthiness. This evaluates generalization to other speakers within the same study and with the same listeners. The groups reflect rating patterns in this experiment. Differences may reflect how listeners use the scale, and the original and cloned clips contain different excerpts.
+
+```sh
+python scripts/listener_audience.py data/lavan2025/experiment1b runs/listener-audience --panel-size 10
+```
+
+Use a fresh output directory for each run. `report.json` includes the split, model-free resampling settings, held-out metrics and aggregate results. Individual listener ratings stay in the original local trials file.
+
+To compare the two recordings for one held-out speaker pair, pass `--speaker-pair`. The report adds observed rating means, counts of listeners who rated each version higher, ties, and the spread of the resampled panel's mean difference. Each endpoint uses only listeners who rated both recordings. The whole-study summary stays available in the same output.
+
+```sh
+python scripts/listener_audience.py data/lavan2025/experiment1b \
+  runs/listener-audience-vctk005 --speaker-pair vctk_005 --panel-size 10
+```
+
+For this pair, the human recording scored 14.96 points higher on perceived trustworthiness in the lower-calibration group and 9.60 higher in the higher-calibration group. The same groups ranked the two clips in opposite directions on realness. The study collected ratings for these clips, and the two versions use different excerpts. A controlled comparison of new recordings would need ratings for those recordings and the same script in both versions.
+
+The [product audience study](product-audience.md) extends this workflow to a defined task, a frozen response forecast and evaluation against new participants.

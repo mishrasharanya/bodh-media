@@ -13,10 +13,9 @@ TRIAL_COLUMNS = (
 )
 
 
-def describe_trials(manifest: Path, trials: Path) -> dict:
+def read_listener_trials(manifest: Path, trials: Path):
+    """Yield validated listener ratings joined to their stimulus metadata."""
     assets = {(asset.dataset, asset.asset_id): asset for asset in read_assets(manifest)}
-    stimuli = defaultdict(lambda: defaultdict(list))
-    participants = defaultdict(set)
     with trials.open(newline="", encoding="utf-8-sig") as source:
         rows = csv.DictReader(source)
         if not set(TRIAL_COLUMNS).issubset(rows.fieldnames or ()):
@@ -34,9 +33,16 @@ def describe_trials(manifest: Path, trials: Path) -> dict:
             if not math.isfinite(value):
                 raise ValueError(f"Non-finite trial value at line {rows.line_num}")
             seen.add(key)
-            group = (dataset, arm, endpoint, asset.condition)
-            stimuli[group][clip].append(value)
-            participants[group].add(listener)
+            yield asset, arm, listener, endpoint, value
+
+
+def describe_trials(manifest: Path, trials: Path) -> dict:
+    stimuli = defaultdict(lambda: defaultdict(list))
+    participants = defaultdict(set)
+    for asset, arm, listener, endpoint, value in read_listener_trials(manifest, trials):
+        group = (asset.dataset, arm, endpoint, asset.condition)
+        stimuli[group][asset.asset_id].append(value)
+        participants[group].add(listener)
     if not stimuli:
         raise ValueError("No listener trials supplied")
     groups = []
