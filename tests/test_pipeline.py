@@ -12,6 +12,7 @@ from scipy.io.wavfile import write
 
 from bodh import baseline
 from bodh.audio import features, load_audio, trim_quiet_edges
+from bodh.claim_evidence import EvidenceIndex
 from bodh.manifest import COLUMNS, write_csv
 from bodh.perception import TRIAL_COLUMNS
 
@@ -65,3 +66,17 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result["roc_auc"], 0.5)
         self.assertEqual(result["eer"], 0.5)
         self.assertEqual(result["false_positives"], 0)
+
+    def test_new_claim_does_not_inherit_reference_verdict(self):
+        reference = {
+            "claim": "The station opened in 2020.", "label": "Supported",
+            "questions": [{"question": "When did the station open?", "answers": [
+                {"source_url": "https://example.org/records", "answer": "The station opened in 2020."}
+            ]}],
+        }
+        index = EvidenceIndex([reference])
+        self.assertEqual(index.report("The station opened in 2020")["status"], "published_reference")
+        unknown = index.report("The station opened in 2021.")
+        self.assertEqual(unknown["status"], "needs_review")
+        self.assertIsNone(unknown["verdict"])
+        self.assertEqual(unknown["candidate_evidence"][0]["url"], "https://example.org/records")

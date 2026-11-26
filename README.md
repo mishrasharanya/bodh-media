@@ -12,7 +12,7 @@ Bodh runs on a CPU and uses local files. The pipeline includes audio feature ext
 
 ![Aggregate results from Lavan speaker pairs and the quiet-frame comparison across both audio pilots](docs/figures/pilot-insights.png)
 
-See the [research notes](docs/research.md) for datasets and pilot findings, and the [evaluation report](docs/evaluation.md) for the split audit, model comparisons, uncertainty, and limitations.
+See the [research notes](docs/research.md) for datasets and pilot findings, the [evaluation report](docs/evaluation.md) for the model comparisons, and the [media review guide](docs/media-review.md) for the independent audio benchmark and claim-evidence demo.
 
 ## Quickstart
 
